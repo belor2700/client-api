@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const clientOrderSchema = new mongoose.Schema({
   userId:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   type:        { type: String, enum: ['depot', 'retrait'], required: true },
-  operator:    { type: String, enum: ['mvola', 'orange', 'airtel'], required: true },
+  operator:    { type: String, enum: ['mvola', 'orange', 'airtel', 'mvola_km'], required: true },
   montant:     { type: Number, required: true, min: 1 },
   numero:      { type: String, required: true },   // numéro du wallet client
   provider:    { type: String, default: '' },      // ex: "Deriv"
