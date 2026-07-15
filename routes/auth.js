@@ -25,6 +25,7 @@ function publicUser(u) {
     photo: u.photo || '',
     addressLat: u.addressLat ?? null,
     addressLng: u.addressLng ?? null,
+    kmAccount: !!u.kmAccount,
     wallets: u.wallets, providers: u.providers, lang: u.lang, role: u.role
   };
 }
@@ -34,7 +35,7 @@ function publicUser(u) {
 router.post('/register', async (req, res) => {
   try {
     let { name, email, phone, password, confirmPassword, lang,
-          country, address, addressLat, addressLng, photo } = req.body || {};
+          country, address, addressLat, addressLng, photo, kmAccount } = req.body || {};
     if (!password || password.length < 6)
       return res.status(400).json({ error: 'Mot de passe trop court (min 6)' });
     // FIX: confirmation mot de passe -- verifiee cote serveur aussi
@@ -61,7 +62,9 @@ router.post('/register', async (req, res) => {
       address: address || '',
       addressLat: (typeof addressLat === 'number') ? addressLat : null,
       addressLng: (typeof addressLng === 'number') ? addressLng : null,
-      photo: (typeof photo === 'string') ? photo : ''
+      photo: (typeof photo === 'string') ? photo : '',
+      // Compte pour Comores (Fc / Telma Comores irery)
+      kmAccount: kmAccount === true || kmAccount === 'true' || kmAccount === 1
     });
     return res.json({ ok: true, token: sign(u), user: publicUser(u) });
   } catch (e) {

@@ -35,11 +35,21 @@ router.post('/', async (req, res) => {
     let { type, operator, montant, numero, provider, providerId } = req.body || {};
     type = (type || '').toLowerCase();
     operator = (operator || '').toLowerCase();
-    montant = Number(montant);
+    // VIRGULE: "1,50" -> 1.50 (saisie FR)
+    montant = Number(String(montant).replace(/\s/g, "").replace(",", "."));
     numero = (numero || '').replace(/[\s.\-]/g, '');
 
     if (!['depot', 'retrait'].includes(type)) return res.status(400).json({ error: 'Type invalide' });
-    if (!['mvola', 'orange', 'airtel'].includes(operator)) return res.status(400).json({ error: 'Opérateur invalide' });
+    if (!['mvola', 'orange', 'airtel', 'mvola_km'].includes(operator)) return res.status(400).json({ error: 'Opérateur invalide' });
+    // Compte Comores: Telma Comores (mvola_km) IRERY ; compte Madagascar: tsy mvola_km
+    try {
+      const User = require('../models/User');
+      const u = await User.findById(req.userId).select('kmAccount').lean();
+      if (u && u.kmAccount && operator !== 'mvola_km')
+        return res.status(400).json({ error: 'Compte Comores: seul Telma Comores est disponible' });
+      if (u && !u.kmAccount && operator === 'mvola_km')
+        return res.status(400).json({ error: 'Opérateur réservé aux comptes Comores' });
+    } catch(eU) {}
     if (!montant || montant < 1) return res.status(400).json({ error: 'Montant invalide' });
     if (!numero) return res.status(400).json({ error: 'Numéro requis' });
 

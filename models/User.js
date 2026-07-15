@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 // Wallet mobile money: opérateur + numéro
 const walletSchema = new mongoose.Schema({
-  operator: { type: String, enum: ['mvola', 'orange', 'airtel'], required: true },
+  operator: { type: String, enum: ['mvola', 'orange', 'airtel', 'mvola_km'], required: true },
   numero:   { type: String, required: true },
   label:    { type: String, default: '' }
 }, { _id: true });
@@ -22,6 +22,8 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   // FIX: Adresse + Pays + coordonnees GPS (Point exact via Maps)
   country:      { type: String, default: 'Madagascar' },
+  // Compte COMORES: safidiana amin'ny inscription -- Telma Comores irery + devise Fc
+  kmAccount:    { type: Boolean, default: false },
   address:      { type: String, default: '' },
   photo:        { type: String, default: '' },
   addressLat:   { type: Number, default: null },
