@@ -102,4 +102,33 @@ router.get('/:id/status', async (req, res) => {
   } catch (e) { return res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/order/record-retrait
+// Enregistre un retrait Deriv DEJA execute dans le core (flux OAuth : le retrait
+// est cree cote core par /api/retrait/deriv-withdraw, PAS via POST /api/order).
+// On cree seulement le ClientOrder pour l'historique, SANS recreer l'ordre core
+// (donc AUCUNE duplication). Le coreOrderId permet la sync de statut ulterieure.
+router.post('/record-retrait', async (req, res) => {
+  try {
+    let { operator, montant, numero, provider, providerId, coreOrderId } = req.body || {};
+    operator = (operator || '').toLowerCase();
+    montant = Number(String(montant).replace(/\s/g, '').replace(',', '.'));
+    numero = (numero || '').replace(/[\s.\-]/g, '');
+    if (!['mvola', 'orange', 'airtel', 'mvola_km'].includes(operator))
+      return res.status(400).json({ error: 'Operateur invalide' });
+    if (!montant || montant < 1) return res.status(400).json({ error: 'Montant invalide' });
+    if (!numero) return res.status(400).json({ error: 'Numero requis' });
+    // Anti-doublon : si ce retrait core est deja enregistre pour ce client, on renvoie l'existant.
+    if (coreOrderId) {
+      const existing = await ClientOrder.findOne({ userId: req.userId, coreOrderId: String(coreOrderId) });
+      if (existing) return res.json({ ok: true, orderId: existing._id, already: true });
+    }
+    const order = await ClientOrder.create({
+      userId: req.userId, type: 'retrait', operator, montant, numero,
+      provider: provider || 'Deriv', providerId: providerId || '',
+      coreOrderId: coreOrderId ? String(coreOrderId) : '', status: 'pending'
+    });
+    return res.json({ ok: true, orderId: order._id });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
