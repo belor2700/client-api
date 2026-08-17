@@ -12,6 +12,10 @@ const clientOrderSchema = new mongoose.Schema({
   providerId:  { type: String, default: '' },      // ID fournisseur
   coreOrderId: { type: String, default: '' },      // _id de l'ordre dans le backend core
   ussdCode:    { type: String, default: '' },
+  // Paiement Orange Money (API). payUrl est une url DU CORE qui redirige cote
+  // serveur vers Orange : aucun jeton Orange n'est stocke ici.
+  payUrl:      { type: String, default: '' },
+  payMode:     { type: String, enum: ['', 'ussd', 'orange_api'], default: '' },
   session:     { type: String, default: '' },       // n° de session renvoyé par le WebView/core
   gatewayNumero:{ type: String, default: '' },      // numéro passerelle (pour dépôt)
   status:      { type: String, enum: ['pending', 'processing', 'success', 'failed'], default: 'pending' },

@@ -60,11 +60,19 @@ router.post('/', async (req, res) => {
     const order = await ClientOrder.create({
       userId: req.userId, type, operator, montant, numero,
       provider: provider || '', providerId: providerId || '',
-      coreOrderId: core.id, ussdCode: core.ussdCode || '', status: 'pending'
+      coreOrderId: core.id, ussdCode: core.ussdCode || '', status: 'pending',
+      payUrl: core.payUrl || '', payMode: core.payMode || ''
     });
 
-    // 3) URL WebView (le backend client proxy le statut ; voir GET /:id/status)
+    // 3) Deux chemins possibles pour le paiement :
+    //    - payUrl  : le core a ouvert un paiement Orange Money (API). Le client
+    //      est envoye directement chez Orange, il n'y a AUCUN code a composer,
+    //      donc pas de WebView de paiement. Aucun jeton Orange ne passe ici :
+    //      payUrl est une url du core qui redirige cote serveur.
+    //    - webviewUrl : chemin habituel (code USSD affiche dans le WebView).
+    //      C'est aussi le repli automatique quand l'API Orange n'a pas repondu.
     const webviewUrl = `${PAYMENT_BASE()}/?order=${core.id}&client=${order._id}`;
+    const payUrl = core.payUrl || '';
 
     return res.json({
       ok: true,
@@ -72,7 +80,9 @@ router.post('/', async (req, res) => {
       coreOrderId: core.id,
       ussdCode: core.ussdCode,
       channel: core.channel,
-      webviewUrl
+      webviewUrl,
+      payUrl,
+      payMode: core.payMode || (payUrl ? 'orange_api' : 'ussd')
     });
   } catch (e) {
     return res.status(502).json({ error: e.message });
@@ -98,7 +108,13 @@ router.get('/:id/status', async (req, res) => {
     const order = await ClientOrder.findOne({ _id: req.params.id, userId: req.userId });
     if (!order) return res.status(404).json({ error: 'Ordre introuvable' });
     await syncFromCore(order);
-    return res.json({ status: order.status, montant: order.montant, type: order.type, session: order.session, ussdCode: order.ussdCode });
+    return res.json({
+      status: order.status, montant: order.montant, type: order.type,
+      session: order.session, ussdCode: order.ussdCode,
+      // Permet a la vitrine de reprendre un paiement Orange non termine sans
+      // recreer un ordre (donc sans risque de double paiement).
+      payUrl: order.payUrl || '', payMode: order.payMode || ''
+    });
   } catch (e) { return res.status(500).json({ error: e.message }); }
 });
 
