@@ -1,7 +1,7 @@
 const express = require('express');
 const ClientOrder = require('../models/ClientOrder');
 const auth = require('../middleware/auth');
-const { coreCreateOrder, coreGetOrder } = require('../utils/coreApi');
+const { coreCreateOrder, coreGetOrder, coreVerifyPay } = require('../utils/coreApi');
 
 const router = express.Router();
 router.use(auth);
@@ -15,6 +15,12 @@ const FINAL = ['success', 'failed'];
 async function syncFromCore(order) {
   if (!order || !order.coreOrderId || FINAL.includes(order.status)) return false;
   try {
+    // Paiement Orange encore ouvert : on demande au core de le verifier aupres
+    // d'Orange AVANT de relire le statut, sinon on relirait une valeur qu'on
+    // sait potentiellement perimee.
+    if (order.payMode === 'orange_api' && !FINAL.includes(order.status)) {
+      await coreVerifyPay(order.coreOrderId);
+    }
     const core = await coreGetOrder(order.coreOrderId);
     if (!core) return false;
     let changed = false;

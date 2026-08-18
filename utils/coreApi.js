@@ -55,4 +55,18 @@ async function coreGetOrder(id) {
   return coreFetch('/api/retrait/' + id);
 }
 
-module.exports = { coreCreateOrder, coreGetOrder, BASE, TOKEN };
+/**
+ * Demande au core de VERIFIER un paiement Orange aupres d'Orange, maintenant.
+ * Sans cela, la vitrine devait attendre le prochain passage de scrutation du
+ * core (jusqu'a 25 s) avant de voir un paiement pourtant deja regle.
+ * Ne leve jamais : la synchronisation habituelle reste le comportement de base.
+ */
+async function coreVerifyPay(id) {
+  try {
+    return await coreFetch('/api/orange-pay/verify/' + id, { method: 'POST' });
+  } catch (e) {
+    return null;
+  }
+}
+
+module.exports = { coreCreateOrder, coreGetOrder, coreVerifyPay, BASE, TOKEN };
