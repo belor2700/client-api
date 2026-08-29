@@ -42,6 +42,9 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/order', require('./routes/order'));
 app.use('/api/photo', require('./routes/photo'));
+// Gestion des comptes depuis l'admin : protegee par ADMIN_API_KEY, pas par un
+// jeton client (voir routes/admin.js).
+app.use('/api/admin', require('./routes/admin'));
 
 app.use((req, res) => res.status(404).json({ error: 'Route introuvable' }));
 
