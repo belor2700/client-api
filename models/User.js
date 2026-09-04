@@ -33,6 +33,10 @@ const userSchema = new mongoose.Schema({
   lang:         { type: String, enum: ['fr', 'mg'], default: 'fr' },
   role:         { type: String, default: 'client' },
   active:       { type: Boolean, default: true },
+  // Suppression DOUCE : le compte disparait des listes mais reste en base, car
+  // ses ordres passes doivent rester verifiables.
+  deleted:      { type: Boolean, default: false },
+  deletedAt:    { type: Date, default: null },
   createdAt:    { type: Date, default: Date.now },
   updatedAt:    { type: Date, default: Date.now }
 }, { collection: 'client_users' });

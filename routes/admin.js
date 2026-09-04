@@ -46,7 +46,9 @@ router.get('/users', adminKey, async (req, res) => {
     const q      = String(req.query.q || '').trim();
     const page   = Math.max(1, parseInt(req.query.page || '1', 10));
     const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit || '25', 10)));
-    const filtre = {};
+    // Les comptes supprimes (suppression douce) restent en base pour la
+    // tracabilite des ordres, mais ne doivent plus apparaitre dans la liste.
+    const filtre = { deleted: { $ne: true } };
     if (q) {
       const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       filtre.$or = [{ name: rx }, { email: rx }, { phone: rx }, { address: rx }];
@@ -111,6 +113,48 @@ router.patch('/users/:id', adminKey, async (req, res) => {
 });
 
 // POST /api/admin/users/:id/password  { password }
+// GET /api/admin/stats?periode=jour|semaine|mois
+// Deux series pour l'histogramme (depot / retrait) et le total des inscriptions
+// du client, sur le meme decoupage temporel.
+router.get('/stats', adminKey, async (req, res) => {
+  try {
+    const ClientOrder = require('../models/ClientOrder');
+    const p = String(req.query.periode || 'jour');
+    const pas = p === 'mois' ? 30 : (p === 'semaine' ? 7 : 1);
+    const cases = p === 'jour' ? 7 : (p === 'semaine' ? 8 : 6);
+    const debut = new Date(Date.now() - pas * cases * 86400000);
+
+    const cmds = await ClientOrder.find({ createdAt: { $gte: debut } })
+                                 .select('type createdAt').lean();
+    const users = await User.find({ createdAt: { $gte: debut }, deleted: { $ne: true } })
+                            .select('createdAt').lean();
+
+    const labels = [], depot = [], retrait = [], inscr = [];
+    for (let i = cases - 1; i >= 0; i--) {
+      const fin = new Date(Date.now() - i * pas * 86400000);
+      const deb = new Date(fin.getTime() - pas * 86400000);
+      labels.push(fin.toISOString().slice(0, 10));
+      depot.push(cmds.filter(c => c.type === 'depot'   && c.createdAt >= deb && c.createdAt < fin).length);
+      retrait.push(cmds.filter(c => c.type === 'retrait' && c.createdAt >= deb && c.createdAt < fin).length);
+      inscr.push(users.filter(u => u.createdAt >= deb && u.createdAt < fin).length);
+    }
+    const totalClients = await User.countDocuments({ deleted: { $ne: true } });
+    const actifs       = await User.countDocuments({ deleted: { $ne: true }, active: { $ne: false } });
+    res.json({ ok: true, periode: p, labels, depot, retrait, inscriptions: inscr,
+               totalClients, actifs, inactifs: totalClients - actifs });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/admin/users/:id - suppression douce
+router.delete('/users/:id', adminKey, async (req, res) => {
+  try {
+    const u = await User.findByIdAndUpdate(req.params.id,
+      { $set: { deleted: true, deletedAt: new Date(), active: false, updatedAt: new Date() } },
+      { new: true });
+    res.json({ ok: true, id: u._id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/users/:id/password', adminKey, async (req, res) => {
   try {
     const mdp = String(req.body.password || '');
