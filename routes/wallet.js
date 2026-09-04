@@ -10,6 +10,16 @@ const cleanPhone = (v) => (v || '').replace(/[\s.\-]/g, '');
 // ───── Wallets mobile money ─────
 
 // POST /api/wallet  { operator, numero, label? }
+// Prefixes par operateur. Un numero Orange saisi comme wallet Telma enverrait
+// l'argent vers un compte inexistant : le controle se fait donc cote serveur,
+// pas seulement dans le formulaire. Les Comores ne sont pas contraintes.
+const PREFIXES = { mvola: ['034', '038'], orange: ['032', '037'], airtel: ['033'] };
+function prefixeValide(operator, numero) {
+  const p = PREFIXES[operator];
+  if (!p) return true;                       // mvola_km : aucune contrainte
+  return p.some(x => String(numero).startsWith(x));
+}
+
 router.post('/', async (req, res) => {
   try {
     let { operator, numero, label } = req.body || {};
@@ -18,6 +28,9 @@ router.post('/', async (req, res) => {
     if (!['mvola', 'orange', 'airtel', 'mvola_km'].includes(operator))
       return res.status(400).json({ error: 'Opérateur invalide' });
     if (!numero) return res.status(400).json({ error: 'Numéro requis' });
+    if (!prefixeValide(operator, numero))
+      return res.status(400).json({ error: 'Numero incompatible avec l operateur ('
+        + (PREFIXES[operator] || []).join(' ou ') + ')' });
     const u = await User.findById(req.userId);
     if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
     // Un seul wallet par operateur : sinon l'ajout, libre, permettrait de
@@ -62,6 +75,9 @@ router.patch('/:id', async (req, res) => {
     if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
     const w = (u.wallets || []).find(x => String(x._id) === req.params.id);
     if (!w) return res.status(404).json({ error: 'Wallet introuvable' });
+    if (!prefixeValide(w.operator, numero))
+      return res.status(400).json({ error: 'Numero incompatible avec l operateur ('
+        + (PREFIXES[w.operator] || []).join(' ou ') + ')' });
     if (w.numero === numero && (w.label || '') === label)
       return res.status(400).json({ error: 'Aucun changement' });
     const WalletRequest = require('../models/WalletRequest');
