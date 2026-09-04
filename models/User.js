@@ -33,6 +33,10 @@ const userSchema = new mongoose.Schema({
   lang:         { type: String, enum: ['fr', 'mg'], default: 'fr' },
   role:         { type: String, default: 'client' },
   active:       { type: Boolean, default: true },
+  // Annonces deja vues et annonces masquees par CE client : le badge et la
+  // liste sont donc propres a chaque compte, pas a l'appareil.
+  annoncesLues:    { type: [String], default: [] },
+  annoncesMasquees:{ type: [String], default: [] },
   // Suppression DOUCE : le compte disparait des listes mais reste en base, car
   // ses ordres passes doivent rester verifiables.
   deleted:      { type: Boolean, default: false },

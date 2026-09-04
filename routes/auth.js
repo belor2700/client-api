@@ -18,6 +18,8 @@ const cleanPhone = (v) => (v || '').replace(/[\s.\-]/g, '');
 
 function publicUser(u) {
   return {
+    annoncesLues: u.annoncesLues || [],
+    annoncesMasquees: u.annoncesMasquees || [],
     id: u._id, name: u.name, email: u.email || null, phone: u.phone || null,
     // FIX: adresse/pays/coordonnees visibles ao amin'ny profile client
     country: u.country || 'Madagascar',
@@ -136,6 +138,37 @@ router.patch('/me', auth, async (req, res) => {
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
+});
+
+// POST /api/auth/annonces/lues   { ids: [] }
+// Marque des annonces comme vues : le point rouge disparait.
+router.post('/annonces/lues', auth, async (req, res) => {
+  try {
+    const ids = (req.body || {}).ids || [];
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids invalide' });
+    const u = await User.findById(req.userId);
+    if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    const set = new Set([...(u.annoncesLues || []), ...ids.map(String)]);
+    u.annoncesLues = [...set].slice(-300);
+    u.updatedAt = new Date();
+    await u.save();
+    res.json({ ok: true, lues: u.annoncesLues });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/auth/annonces/masquer   { id }
+// Masque une annonce pour CE client uniquement : les autres la voient encore.
+router.post('/annonces/masquer', auth, async (req, res) => {
+  try {
+    const id = String((req.body || {}).id || '');
+    if (!id) return res.status(400).json({ error: 'id requis' });
+    const u = await User.findById(req.userId);
+    if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    if (!(u.annoncesMasquees || []).includes(id)) u.annoncesMasquees.push(id);
+    u.updatedAt = new Date();
+    await u.save();
+    res.json({ ok: true, masquees: u.annoncesMasquees });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
