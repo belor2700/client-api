@@ -15,11 +15,15 @@ router.post('/', async (req, res) => {
     let { operator, numero, label } = req.body || {};
     operator = (operator || '').toLowerCase();
     numero = cleanPhone(numero);
-    if (!['mvola', 'orange', 'airtel'].includes(operator))
+    if (!['mvola', 'orange', 'airtel', 'mvola_km'].includes(operator))
       return res.status(400).json({ error: 'Opérateur invalide' });
     if (!numero) return res.status(400).json({ error: 'Numéro requis' });
     const u = await User.findById(req.userId);
     if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    // Un seul wallet par operateur : sinon l'ajout, libre, permettrait de
+    // contourner la validation exigee pour une modification.
+    if ((u.wallets || []).some(w => w.operator === operator))
+      return res.status(409).json({ error: 'Un wallet existe deja pour cet operateur. Modifiez-le.' });
     u.wallets.push({ operator, numero, label: label || '' });
     u.updatedAt = new Date();
     await u.save();
@@ -32,10 +36,52 @@ router.delete('/:id', async (req, res) => {
   try {
     const u = await User.findById(req.userId);
     if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
-    u.wallets = u.wallets.filter(w => String(w._id) !== req.params.id);
-    u.updatedAt = new Date();
-    await u.save();
-    return res.json({ ok: true, wallets: u.wallets });
+    const w = (u.wallets || []).find(x => String(x._id) === req.params.id);
+    if (!w) return res.status(404).json({ error: 'Wallet introuvable' });
+    const WalletRequest = require('../models/WalletRequest');
+    const dejaLa = await WalletRequest.findOne({ userId: u._id, walletId: req.params.id, statut: 'en_attente' });
+    if (dejaLa) return res.status(409).json({ error: 'Une demande est deja en attente pour ce wallet', demande: dejaLa });
+    const dem = await WalletRequest.create({
+      userId: u._id, type: 'suppression', walletId: req.params.id,
+      ancien: { operator: w.operator, numero: w.numero, label: w.label || '' }
+    });
+    // Le wallet reste actif tant que l'administrateur n'a pas tranche.
+    return res.json({ ok: true, demande: dem, wallets: u.wallets });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
+// PATCH /api/wallet/:id  { numero, label? }
+// Ne modifie RIEN : cree une demande. L'ancien numero continue de recevoir
+// l'argent tant que l'administrateur n'a pas valide.
+router.patch('/:id', async (req, res) => {
+  try {
+    const numero = cleanPhone((req.body || {}).numero);
+    const label  = ((req.body || {}).label || '').trim();
+    if (!numero) return res.status(400).json({ error: 'Numéro requis' });
+    const u = await User.findById(req.userId);
+    if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    const w = (u.wallets || []).find(x => String(x._id) === req.params.id);
+    if (!w) return res.status(404).json({ error: 'Wallet introuvable' });
+    if (w.numero === numero && (w.label || '') === label)
+      return res.status(400).json({ error: 'Aucun changement' });
+    const WalletRequest = require('../models/WalletRequest');
+    const dejaLa = await WalletRequest.findOne({ userId: u._id, walletId: req.params.id, statut: 'en_attente' });
+    if (dejaLa) return res.status(409).json({ error: 'Une demande est deja en attente pour ce wallet', demande: dejaLa });
+    const dem = await WalletRequest.create({
+      userId: u._id, type: 'modification', walletId: req.params.id,
+      ancien:  { operator: w.operator, numero: w.numero, label: w.label || '' },
+      nouveau: { operator: w.operator, numero: numero, label: label }
+    });
+    return res.json({ ok: true, demande: dem, wallets: u.wallets });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/wallet/demandes — les demandes en attente du client connecte
+router.get('/demandes', async (req, res) => {
+  try {
+    const WalletRequest = require('../models/WalletRequest');
+    const l = await WalletRequest.find({ userId: req.userId, statut: 'en_attente' }).lean();
+    return res.json({ ok: true, demandes: l });
   } catch (e) { return res.status(500).json({ error: e.message }); }
 });
 

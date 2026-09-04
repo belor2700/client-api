@@ -145,6 +145,56 @@ router.get('/stats', adminKey, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ───── Demandes de changement de wallet ─────
+
+// GET /api/admin/demandes?statut=en_attente
+router.get('/demandes', adminKey, async (req, res) => {
+  try {
+    const WalletRequest = require('../models/WalletRequest');
+    const statut = String(req.query.statut || 'en_attente');
+    const l = await WalletRequest.find(statut === 'toutes' ? {} : { statut })
+                                 .sort({ createdAt: -1 }).limit(200).lean();
+    const ids = [...new Set(l.map(d => String(d.userId)))];
+    const us  = await User.find({ _id: { $in: ids } }).select('name email phone').lean();
+    const par = {}; us.forEach(u => { par[String(u._id)] = u; });
+    res.json({ ok: true, demandes: l.map(d => ({
+      ...d, client: par[String(d.userId)] || null
+    })) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/demandes/:id/decision  { decision: 'approuve'|'refuse', motif? }
+router.post('/demandes/:id/decision', adminKey, async (req, res) => {
+  try {
+    const WalletRequest = require('../models/WalletRequest');
+    const { decision, motif } = req.body || {};
+    if (!['approuve', 'refuse'].includes(decision))
+      return res.status(400).json({ error: 'decision invalide' });
+    const d = await WalletRequest.findById(req.params.id);
+    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    if (d.statut !== 'en_attente')
+      return res.status(409).json({ error: 'Demande deja traitee' });
+
+    if (decision === 'approuve') {
+      const u = await User.findById(d.userId);
+      if (!u) return res.status(404).json({ error: 'Compte introuvable' });
+      const w = (u.wallets || []).find(x => String(x._id) === d.walletId);
+      if (!w) return res.status(404).json({ error: 'Wallet introuvable' });
+      if (d.type === 'suppression') {
+        u.wallets = u.wallets.filter(x => String(x._id) !== d.walletId);
+      } else {
+        w.numero = d.nouveau.numero;
+        w.label  = d.nouveau.label || '';
+      }
+      u.updatedAt = new Date();
+      await u.save();
+    }
+    d.statut = decision; d.motif = motif || ''; d.decidedAt = new Date();
+    await d.save();
+    res.json({ ok: true, demande: d });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE /api/admin/users/:id - suppression douce
 router.delete('/users/:id', adminKey, async (req, res) => {
   try {
