@@ -33,6 +33,15 @@ const userSchema = new mongoose.Schema({
   lang:         { type: String, enum: ['fr', 'mg'], default: 'fr' },
   role:         { type: String, default: 'client' },
   active:       { type: Boolean, default: true },
+  // Desactivation demandee par LE CLIENT (a distinguer de active:false, qui est
+  // une sanction administrative et interdit la connexion). Ici le client peut
+  // toujours se connecter : c'est le seul moyen de reactiver son compte.
+  desactiveParClient: { type: Boolean, default: false },
+  desactiveLe:        { type: Date, default: null },
+  // Suppression demandee : le compte est efface automatiquement apres 60 jours
+  // si le client ne revient pas. La date sert de compte a rebours.
+  suppressionDemandeeLe: { type: Date, default: null },
+  motifDepart:           { type: String, default: '' },
   // Annonces deja vues et annonces masquees par CE client : le badge et la
   // liste sont donc propres a chaque compte, pas a l'appareil.
   annoncesLues:    { type: [String], default: [] },

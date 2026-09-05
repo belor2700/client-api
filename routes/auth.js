@@ -18,6 +18,8 @@ const cleanPhone = (v) => (v || '').replace(/[\s.\-]/g, '');
 
 function publicUser(u) {
   return {
+    desactiveParClient: !!u.desactiveParClient,
+    suppressionDemandeeLe: u.suppressionDemandeeLe || null,
     annoncesLues: u.annoncesLues || [],
     annoncesMasquees: u.annoncesMasquees || [],
     id: u._id, name: u.name, email: u.email || null, phone: u.phone || null,
@@ -168,6 +170,59 @@ router.post('/annonces/masquer', auth, async (req, res) => {
     u.updatedAt = new Date();
     await u.save();
     res.json({ ok: true, masquees: u.annoncesMasquees });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ───── Securite du compte (cote client) ─────
+
+// POST /api/auth/securite/desactiver   { motif }
+// Pause volontaire. Le client garde l'acces : c'est par la qu'il reactive.
+router.post('/securite/desactiver', auth, async (req, res) => {
+  try {
+    const motif = String((req.body || {}).motif || '').trim();
+    if (motif.length < 5) return res.status(400).json({ error: 'Motif requis' });
+    const u = await User.findById(req.userId);
+    if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    u.desactiveParClient = true;
+    u.desactiveLe = new Date();
+    u.motifDepart = motif;
+    u.updatedAt = new Date();
+    await u.save();
+    res.json({ ok: true, user: publicUser(u) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/auth/securite/supprimer   { motif }
+// Suppression differee : 60 jours pour changer d'avis. Rien n'est efface ici.
+router.post('/securite/supprimer', auth, async (req, res) => {
+  try {
+    const motif = String((req.body || {}).motif || '').trim();
+    if (motif.length < 5) return res.status(400).json({ error: 'Motif requis' });
+    const u = await User.findById(req.userId);
+    if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    u.desactiveParClient = true;
+    u.desactiveLe = u.desactiveLe || new Date();
+    u.suppressionDemandeeLe = new Date();
+    u.motifDepart = motif;
+    u.updatedAt = new Date();
+    await u.save();
+    const fin = new Date(u.suppressionDemandeeLe.getTime() + 60 * 86400000);
+    res.json({ ok: true, suppressionLe: fin, user: publicUser(u) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/auth/securite/reactiver
+// Annule la pause ET le compte a rebours de suppression.
+router.post('/securite/reactiver', auth, async (req, res) => {
+  try {
+    const u = await User.findById(req.userId);
+    if (!u) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    u.desactiveParClient = false;
+    u.desactiveLe = null;
+    u.suppressionDemandeeLe = null;
+    u.updatedAt = new Date();
+    await u.save();
+    res.json({ ok: true, user: publicUser(u) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

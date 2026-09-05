@@ -39,6 +39,22 @@ async function pingUrl(url, label) {
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+// Purge des comptes dont la suppression a ete demandee il y a plus de 60 jours.
+// Le client garde tout ce temps la possibilite de revenir : la reactivation
+// remet suppressionDemandeeLe a null et le compte echappe a la purge.
+setInterval(async () => {
+  try {
+    const User = require('./models/User');
+    const limite = new Date(Date.now() - 60 * 86400000);
+    const r = await User.updateMany(
+      { suppressionDemandeeLe: { $ne: null, $lte: limite }, deleted: { $ne: true } },
+      { $set: { deleted: true, deletedAt: new Date(), active: false, updatedAt: new Date() } }
+    );
+    if (r.modifiedCount) console.log('purge comptes: ' + r.modifiedCount + ' supprime(s)');
+  } catch (e) { console.error('purge comptes:', e.message); }
+}, 3600000);
+
+
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/order', require('./routes/order'));
 app.use('/api/photo', require('./routes/photo'));
