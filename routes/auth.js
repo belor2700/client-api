@@ -70,6 +70,8 @@ router.post('/register', async (req, res) => {
       // Compte pour Comores (Fc / Telma Comores irery)
       kmAccount: kmAccount === true || kmAccount === 'true' || kmAccount === 1
     });
+    // Canal dedie : savoir en direct qu'un compte vient d'etre cree.
+    try { require('../utils/telegram').notifierInscription(u); } catch(e){}
     return res.json({ ok: true, token: sign(u), user: publicUser(u) });
   } catch (e) {
     return res.status(500).json({ error: e.message });
