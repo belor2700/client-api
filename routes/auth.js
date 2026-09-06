@@ -76,6 +76,90 @@ router.post('/register', async (req, res) => {
   }
 });
 
+/* ============================================================
+ * MOT DE PASSE OUBLIE
+ *
+ * Deux etapes : on envoie un lien par email, puis ce lien permet de choisir
+ * un nouveau mot de passe.
+ *
+ * La reponse de /forgot est TOUJOURS la meme, que le compte existe ou non :
+ * sinon la route deviendrait un moyen de savoir quelles adresses sont
+ * inscrites chez nous.
+ * ============================================================ */
+const crypto = require('crypto');
+const ResetToken = require('../models/ResetToken');
+
+// POST /api/auth/forgot  { email }
+router.post('/forgot', async (req, res) => {
+  const reponse = { ok: true, message: 'Si un compte existe avec cette adresse, un email vient de partir.' };
+  try {
+    const email = String(req.body.email || '').toLowerCase().trim();
+    if (!email || !isEmail(email)) return res.json(reponse);
+
+    const u = await User.findOne({ email });
+    if (!u || u.active === false) return res.json(reponse);
+
+    // Un seul lien valable a la fois : les precedents sont neutralises.
+    await ResetToken.updateMany(
+      { userId: u._id, usedAt: null },
+      { usedAt: new Date() }
+    );
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    await ResetToken.create({
+      userId: u._id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000)   // 1 heure
+    });
+
+    const base = (process.env.SITE_BASE || 'https://matulmada.net').replace(/\/+$/, '');
+    const lien = base + '/?reset=' + token;
+    const { envoyerMail, mailReinitialisation } = require('../utils/mailer');
+    const gabarit = mailReinitialisation(lien, (u.name || '').split(' ')[0]);
+    // L'envoi ne bloque pas la reponse : un SMTP lent ne doit pas faire
+    // patienter le client devant un ecran fige.
+    envoyerMail({ to: email, ...gabarit })
+      .catch(e => console.error('forgot: envoi mail echoue pour', email, ':', e.message));
+
+    return res.json(reponse);
+  } catch (e) {
+    console.error('forgot:', e.message);
+    return res.json(reponse);   // meme en cas d'erreur interne, pas de fuite
+  }
+});
+
+// POST /api/auth/reset  { token, password, confirmPassword }
+router.post('/reset', async (req, res) => {
+  try {
+    const token = String(req.body.token || '').trim();
+    const password = String(req.body.password || '');
+    if (!token) return res.status(400).json({ error: 'Lien invalide' });
+    if (password.length < 6) return res.status(400).json({ error: 'Mot de passe trop court (min 6)' });
+    if (req.body.confirmPassword !== undefined && password !== req.body.confirmPassword)
+      return res.status(400).json({ error: 'Les mots de passe ne correspondent pas' });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const rt = await ResetToken.findOne({ tokenHash, usedAt: null });
+    if (!rt) return res.status(400).json({ error: 'Lien invalide ou déjà utilisé' });
+    if (rt.expiresAt < new Date())
+      return res.status(400).json({ error: 'Lien expiré — refaites une demande' });
+
+    const u = await User.findById(rt.userId);
+    if (!u) return res.status(400).json({ error: 'Compte introuvable' });
+
+    u.passwordHash = await bcrypt.hash(password, 10);
+    await u.save();
+    rt.usedAt = new Date();
+    await rt.save();
+
+    // Connexion directe : le client vient de prouver qu'il possede l'adresse.
+    return res.json({ ok: true, token: sign(u), user: publicUser(u) });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/auth/login  { identifier (email|phone), password }
 router.post('/login', async (req, res) => {
   try {
