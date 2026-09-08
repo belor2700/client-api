@@ -59,6 +59,12 @@ router.delete('/:id', async (req, res) => {
       ancien: { operator: w.operator, numero: w.numero, label: w.label || '' }
     });
     // Le wallet reste actif tant que l'administrateur n'a pas tranche.
+    // Canal dedie : la demande attend une decision humaine, elle doit se voir.
+    try {
+      require('../utils/telegram').notifierWallet('Suppression demandee', u,
+        { operator: w.operator, numero: w.numero },
+        'Le portefeuille reste actif jusqu a validation.');
+    } catch(e){}
     return res.json({ ok: true, demande: dem, wallets: u.wallets });
   } catch (e) { return res.status(500).json({ error: e.message }); }
 });
@@ -88,6 +94,11 @@ router.patch('/:id', async (req, res) => {
       ancien:  { operator: w.operator, numero: w.numero, label: w.label || '' },
       nouveau: { operator: w.operator, numero: numero, label: label }
     });
+    try {
+      require('../utils/telegram').notifierWallet('Changement de numero demande', u,
+        { operator: w.operator, numero: numero, ancien: w.numero },
+        'L ancien numero recoit toujours l argent jusqu a validation.');
+    } catch(e){}
     return res.json({ ok: true, demande: dem, wallets: u.wallets });
   } catch (e) { return res.status(500).json({ error: e.message }); }
 });
