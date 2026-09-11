@@ -162,6 +162,18 @@ router.post('/reset', async (req, res) => {
   }
 });
 
+// POST /api/auth/push  { token }   — enregistre l'appareil pour les notifications
+router.post('/push', auth, async (req, res) => {
+  try {
+    const t = String(req.body.token || '').trim();
+    if (!t || t.length < 20) return res.status(400).json({ error: 'Jeton invalide' });
+    // addToSet plutot que push : reconnecter le meme appareil ne doit pas
+    // creer de doublon, sinon le client recoit la notification deux fois.
+    await User.updateOne({ _id: req.userId }, { $addToSet: { fcmTokens: t } });
+    return res.json({ ok: true });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/auth/login  { identifier (email|phone), password }
 router.post('/login', async (req, res) => {
   try {

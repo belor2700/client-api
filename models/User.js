@@ -31,6 +31,9 @@ const userSchema = new mongoose.Schema({
   wallets:      { type: [walletSchema],   default: [] },
   providers:    { type: [providerSchema], default: [] },
   lang:         { type: String, enum: ['fr', 'mg'], default: 'fr' },
+  // Jetons Firebase du client : un par appareil (telephone, ordinateur...).
+  // Ceux qui deviennent invalides sont retires a l'envoi, pas ici.
+  fcmTokens:    { type: [String], default: [] },
   role:         { type: String, default: 'client' },
   active:       { type: Boolean, default: true },
   // Desactivation demandee par LE CLIENT (a distinguer de active:false, qui est
