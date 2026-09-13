@@ -29,6 +29,11 @@ function adminKey(req, res, next) {
 function publicAdminUser(u) {
   return {
     affilie: !!u.affilie,
+    // Les numeros eux-memes, pas seulement leur nombre : la liste admin
+    // affiche une colonne par operateur.
+    wallets: (u.wallets || []).map(w => ({
+      operator: w.operator, numero: w.numero, label: w.label || ''
+    })),
     id: u._id, name: u.name || '', email: u.email || null, phone: u.phone || null,
     country: u.country || '', address: u.address || '',
     kmAccount: !!u.kmAccount, lang: u.lang || 'fr',
