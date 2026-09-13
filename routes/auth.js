@@ -18,6 +18,8 @@ const cleanPhone = (v) => (v || '').replace(/[\s.\-]/g, '');
 
 function publicUser(u) {
   return {
+    // Statut affilie : la vitrine s'en sert pour afficher le bon cours.
+    affilie: !!u.affilie,
     desactiveParClient: !!u.desactiveParClient,
     suppressionDemandeeLe: u.suppressionDemandeeLe || null,
     annoncesLues: u.annoncesLues || [],
