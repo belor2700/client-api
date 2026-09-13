@@ -28,6 +28,7 @@ function adminKey(req, res, next) {
 
 function publicAdminUser(u) {
   return {
+    affilie: !!u.affilie,
     id: u._id, name: u.name || '', email: u.email || null, phone: u.phone || null,
     country: u.country || '', address: u.address || '',
     kmAccount: !!u.kmAccount, lang: u.lang || 'fr',
@@ -163,6 +164,39 @@ router.get('/demandes', adminKey, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/admin/demandes/approuver-tout
+// Traite d'un coup les demandes en attente. Chaque demande est appliquee
+// separement : une erreur sur l'une n'annule pas les autres, et le compte
+// rendu dit exactement ce qui est passe.
+router.post('/demandes/approuver-tout', adminKey, async (req, res) => {
+  try {
+    const WalletRequest = require('../models/WalletRequest');
+    const liste = await WalletRequest.find({ statut: 'en_attente' });
+    let ok = 0;
+    const echecs = [];
+    for (const d of liste) {
+      try {
+        const u = await User.findById(d.userId);
+        if (!u) { echecs.push({ id: d._id, motif: 'compte introuvable' }); continue; }
+        const w = (u.wallets || []).find(x => String(x._id) === d.walletId);
+        if (!w) { echecs.push({ id: d._id, motif: 'wallet introuvable' }); continue; }
+        if (d.type === 'suppression') {
+          u.wallets = u.wallets.filter(x => String(x._id) !== d.walletId);
+        } else {
+          w.numero = d.nouveau.numero;
+          w.label  = d.nouveau.label || '';
+        }
+        u.updatedAt = new Date();
+        await u.save();
+        d.statut = 'approuve'; d.decidedAt = new Date();
+        await d.save();
+        ok++;
+      } catch (e) { echecs.push({ id: d._id, motif: e.message }); }
+    }
+    res.json({ ok: true, traitees: ok, total: liste.length, echecs });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/admin/demandes/:id/decision  { decision: 'approuve'|'refuse', motif? }
 router.post('/demandes/:id/decision', adminKey, async (req, res) => {
   try {
@@ -192,6 +226,19 @@ router.post('/demandes/:id/decision', adminKey, async (req, res) => {
     d.statut = decision; d.motif = motif || ''; d.decidedAt = new Date();
     await d.save();
     res.json({ ok: true, demande: d });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/admin/users/:id/affilie   { affilie: true|false }
+// Le statut ouvre le cours Deriv reserve aux affilies. Il est pose a la main :
+// aucune regle automatique ne doit pouvoir l'accorder ou le retirer.
+router.post('/users/:id/affilie', adminKey, async (req, res) => {
+  try {
+    const on = (req.body || {}).affilie === true || (req.body || {}).affilie === 'true';
+    const u = await User.findByIdAndUpdate(req.params.id,
+      { $set: { affilie: on, updatedAt: new Date() } }, { new: true });
+    if (!u) return res.status(404).json({ error: 'Compte introuvable' });
+    res.json({ ok: true, affilie: u.affilie });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

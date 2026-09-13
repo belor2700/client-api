@@ -36,6 +36,9 @@ const userSchema = new mongoose.Schema({
   fcmTokens:    { type: [String], default: [] },
   role:         { type: String, default: 'client' },
   active:       { type: Boolean, default: true },
+  // Client affilie : beneficie d'un cours Deriv distinct, active a la main
+  // depuis le panneau. Un client ordinaire garde le cours public.
+  affilie:      { type: Boolean, default: false },
   // Desactivation demandee par LE CLIENT (a distinguer de active:false, qui est
   // une sanction administrative et interdit la connexion). Ici le client peut
   // toujours se connecter : c'est le seul moyen de reactiver son compte.
